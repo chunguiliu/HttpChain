@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.0.xsd">
+<bean id="login" class="com.gcl.webimpl.Login007Request">
+	<property name="url" value="https://www.007bao.com/login.do"/>
+	<property name="headerList">
+	   <list>
+	       <bean class="org.apache.http.message.BasicHeader">
+		  	<constructor-arg index="0" value="Referer"/>
+	   		<constructor-arg index="1" value="https://www.007bao.com/"/>
+	   	</bean>
+	   </list>
+	</property>   
+	<property name="paraList">
+	   <list>
+	   	<bean class="org.apache.http.message.BasicNameValuePair">
+		  	<constructor-arg index="0" value="loginFrameType"/>
+	   		<constructor-arg index="1" value="1"/>
+	   	</bean>
+	   	<bean class="org.apache.http.message.BasicNameValuePair">
+		  	<constructor-arg index="0" value="username"/>
+	   		<constructor-arg index="1" value="hczclcg"/>
+	   	</bean>
+	   	<bean class="org.apache.http.message.BasicNameValuePair">
+		  	<constructor-arg index="0" value="password"/>
+	   		<constructor-arg index="1" value="hczclcg0327"/>
+	   	</bean>
+	   </list>
+	</property>
+</bean>
+<bean id="loginchain" class="com.gcl.http.HttpRequestChain">
+<property name="requestList">
+  <list>
+   <ref bean="login" />
+  </list>
+</property>
+</bean>
+</beans>
