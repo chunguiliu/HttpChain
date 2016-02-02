@@ -32,7 +32,7 @@
 	</target>
 
 	<target name="make.jar" depends="compile">
-	    <jar destfile="${jar.dest.path}/${project.name}.jar" basedir="${build.classes.dir}" >
+	    <jar destfile="${jar.dest.path}/${ant.project.name}.jar" basedir="${build.classes.dir}" >
 	      <manifest>
 	      	<!-- <attribute name="Main-Class" value="${main-class}"/>
 	        <attribute name="Class-Path" value=" lib/appframework-1.0.3.jar lib/swing-worker-1.1.jar"/>
