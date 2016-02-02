@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="http-spring" basedir="." default="make.jar">
+
+	<!-- 代码目录 -->
+	<property name="src.dir" value="${basedir}/src" />
+	<property name="src.java.dir" value="${src.dir}" />
+	<property name="src.config.dir" value="${src.dir}/config" />
+
+	<!-- 临时编译目录 -->
+	<property name="build.dir" value="${basedir}/build" />
+	<property name="build.lib.dir" value="${basedir}/lib" />
+	<property name="build.classes.dir" value="${build.dir}/classes" />
+	<property file="${basedir}/build.properties"/>
+
+	<!-- java编译classpath -->
+	<path id="master-classpath">
+		<fileset dir="${build.lib.dir}" />
+	</path>
+
+	<target name="init">
+		<delete dir="${build.dir}" />
+		<mkdir dir="${build.classes.dir}" />
+	</target>
+	
+	<target name="compile" depends="init" description="编译Java文件">
+		<javac destdir="${build.classes.dir}" source="1.6" debug="true" deprecation="false" 
+			optimize="false" failonerror="true" includeantruntime="false" encoding="gbk" fork="true"
+			excludes="**/webimpl/*">
+			<src path="${src.java.dir}" />
+			<classpath refid="master-classpath" />
+		</javac>
+	</target>
+
+	<target name="make.jar" depends="compile">
+	    <jar destfile="${jar.dest.path}/${project.name}.jar" basedir="${build.classes.dir}" >
+	      <manifest>
+	      	<!-- <attribute name="Main-Class" value="${main-class}"/>
+	        <attribute name="Class-Path" value=" lib/appframework-1.0.3.jar lib/swing-worker-1.1.jar"/>
+	        <attribute name="X-COMMENT" value=" Main-Class will be added automatically by build"/> -->
+	      </manifest>
+	      <!-- <fileset dir="lib" includes="*.jar" /> -->
+	    </jar>
+		<delete dir="${build.dir}" />
+	  </target>
+</project>
