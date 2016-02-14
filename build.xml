@@ -16,7 +16,26 @@
 	<path id="master-classpath">
 		<fileset dir="${build.lib.dir}" />
 	</path>
-
+	<filelist id="cplist" dir="${lib.path}">
+		<file name="apache-mime4j-0.6.1.jar"/>
+		<file name="commons-beanutils-1.8.3.jar"/>
+		<file name="commons-codec-1.5.jar"/>
+		<file name="commons-collections-3.2.1.jar"/>
+		<file name="commons-lang-2.6.jar"/>
+		<file name="commons-logging-1.1.1.jar"/>
+		<file name="ezmorph-1.0.6.jar"/>
+		<file name="htmllexer.jar"/>
+		<file name="htmlparser.jar"/>
+		<file name="httpclient-4.2.5.jar"/>
+		<file name="httpcore-4.2.4.jar"/>
+		<file name="json-lib-2.4-jdk15.jar"/>
+		<file name="log4j-1.2.17.jar"/>
+		<file name="spring-asm-3.2.0.M1.jar"/>
+		<file name="spring-beans-3.2.0.M1.jar"/>
+		<file name="spring-context-3.2.0.M1.jar"/>
+		<file name="spring-core-3.2.0.M1.jar"/>
+		<file name="spring-expression-3.2.0.M1.jar"/>
+	</filelist>
 	<target name="init">
 		<delete dir="${build.dir}" />
 		<mkdir dir="${build.classes.dir}" />
@@ -27,7 +46,9 @@
 			optimize="false" failonerror="true" includeantruntime="false" encoding="gbk" fork="true"
 			excludes="**/webimpl/*">
 			<src path="${src.java.dir}" />
-			<classpath refid="master-classpath" />
+			<classpath>
+				<filelist refid="cplist" />
+			</classpath>
 		</javac>
 	</target>
 
