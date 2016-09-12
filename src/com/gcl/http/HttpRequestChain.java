@@ -10,7 +10,6 @@ import org.apache.http.client.params.CookiePolicy;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.client.LaxRedirectStrategy;
 import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager;
-import org.apache.http.impl.entity.LaxContentLengthStrategy;
 import org.apache.http.params.CoreConnectionPNames;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.FileSystemXmlApplicationContext;
@@ -20,7 +19,7 @@ import com.gcl.exception.RollBackException;
 import com.gcl.exception.StopChainException;
 import com.gcl.util.LogUtil;
 
-public class HttpRequestChain implements ISessionAttr {
+public class HttpRequestChain {
 
 	BasicHttpRequest[] requestList = {};
 	
@@ -132,24 +131,6 @@ public class HttpRequestChain implements ISessionAttr {
 		requestList[requestList.length - 1] = httpRequest;
 	}
 
-	/**请求过程中可用来传递参数*/
-	private Map<String,Object> sessionMap = new HashMap<String,Object>();
-	
-	public void addAttribute(String name,Object value){
-		this.sessionMap.put(name, value);
-	}
-	public Object getAttribute(String name){
-		return this.sessionMap.get(name);
-	}
-	
-	public void copySession(ISessionAttr destSession){
-		Iterator<String> it = sessionMap.keySet().iterator();
-		while(it.hasNext()){
-			String key = it.next();
-			destSession.addAttribute(key, sessionMap.get(key));
-		}
-	}
-	
 	public int getIndex() {
 		return index;
 	}

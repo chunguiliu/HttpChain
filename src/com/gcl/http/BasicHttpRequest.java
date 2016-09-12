@@ -27,16 +27,15 @@ import com.gcl.bean.HeaderList;
 import com.gcl.bean.NameValueList;
 import com.gcl.dao.AfterRequestHandler;
 import com.gcl.dao.BeforeRequestHandler;
-import com.gcl.exception.ReRequestException;
-import com.gcl.exception.RollBackException;
 import com.gcl.exception.StopChainException;
 import com.gcl.factory.ResponseHandlerFactory;
+import com.gcl.http.context.HttpContext;
 import com.gcl.util.Invoker;
 import com.gcl.util.ListUtil;
 import com.gcl.util.LogUtil;
 import com.gcl.util.MapUtil;
 
-public class BasicHttpRequest implements ISessionAttr {
+public class BasicHttpRequest {
 
 	/* 外部注入 */
 	protected String requestUrl;
@@ -99,15 +98,6 @@ public class BasicHttpRequest implements ISessionAttr {
 	public void addParameters(List<NameValuePair> list){
 		this.paraList.addAll(list);
 	}
-	@Override
-	public void addAttribute(String name, Object value) {
-		this.requestChain.addAttribute(name, value);
-	}
-
-	@Override
-	public Object getAttribute(String name) {
-		return this.requestChain.getAttribute(name);
-	}
 
 	public void refresh(){
 		this.headerList.clear();
@@ -124,17 +114,15 @@ public class BasicHttpRequest implements ISessionAttr {
 			while(keys.hasNext()){
 				String key = keys.next();
 				if (invoker.compile(map.get(key))) {
-					map.put(key, String.valueOf(invoker.invoke(
-							new Class[] { ISessionAttr.class },
-							new ISessionAttr[] { this })));
+					map.put(key, String.valueOf(invoker.invoke()));
 				}
 			}
 		}
 		return map;
 	}
 	private List<Header> mergeHeader(){
-		if (this.getAttribute("Referer") != null && !headers.containsKey("Referer"))
-			this.headers.put("Referer", (String) this.getAttribute("Referer"));
+		if (HttpContext.getAttribute("Referer") != null && !headers.containsKey("Referer"))
+			this.headers.put("Referer", (String) HttpContext.getAttribute("Referer"));
 		getNameValuesHandle().handleHeaderMap(this.headers);
 		HeaderList headerList = new HeaderList();
 		headerList.addAll(this.iterateInvokeValues(this.headers));
@@ -171,8 +159,8 @@ public class BasicHttpRequest implements ISessionAttr {
 	 * @return
 	 */
 	public String getCharSet(){
-		return (String) this.getAttribute("charSet") == null ? "utf-8"
-				: (String) this.getAttribute("charSet");
+		return (String) HttpContext.getAttribute("charSet") == null ? "utf-8"
+				: (String) HttpContext.getAttribute("charSet");
 	}
 	public void request(HttpClient httpClient, HttpRequestChain chain) throws Exception{
 		//before request
@@ -198,9 +186,9 @@ public class BasicHttpRequest implements ISessionAttr {
 		//after request
 		//cache
 		//缓存请求的页面内容
-		this.addAttribute("uriRequest", uriRequest);
+		HttpContext.addAttribute("uriRequest", uriRequest);
 		String referer = uriRequest.getURI().toString();
-		this.addAttribute("Referer", referer);
+		HttpContext.addAttribute("Referer", referer);
 		if(afterHandler != null){
 			afterHandler.afterHandle(response, this);
 		}
@@ -209,7 +197,7 @@ public class BasicHttpRequest implements ISessionAttr {
 		this.requestChain.doRequest(httpClient);
 	}
 	private String jointUrl(String simpleUrl){
-		HttpUriRequest uriRequest = (HttpUriRequest) this.getAttribute("uriRequest");
+		HttpUriRequest uriRequest = (HttpUriRequest) HttpContext.getAttribute("uriRequest");
 		if(uriRequest != null){
 			URI uri = uriRequest.getURI();
 			simpleUrl = uri.getScheme()+"://"+uri.getAuthority()+(uri.getAuthority().endsWith("/")?"":"/")+simpleUrl;
@@ -287,7 +275,7 @@ public class BasicHttpRequest implements ISessionAttr {
 	}
 	private ResponseHandler<Object> createResponseHandler(HttpClient httpClient, HttpUriRequest uriRequest) throws InstantiationException{
 		if(responseHandler == null || "".equals(responseHandler)){
-			return new ResponseHandlerImpl(this);
+			return new ResponseHandlerImpl();
 		}else{//InstantiationException
 			Object obj = null;
 			try {
@@ -302,10 +290,10 @@ public class BasicHttpRequest implements ISessionAttr {
 		}
 	}
 	public void setResponse(Object response){
-		this.addAttribute("response", response);
+		HttpContext.addAttribute("response", response);
 	}
 	public Object getReponse(){
-		return this.getAttribute("response");
+		return HttpContext.getAttribute("response");
 	}
 	
 	public String getRequestUrl() {
@@ -383,18 +371,12 @@ public class BasicHttpRequest implements ISessionAttr {
 }
 class ResponseHandlerImpl implements ResponseHandler<Object>{
 
-	private ISessionAttr sessionAttr;
-	
-	public ResponseHandlerImpl(ISessionAttr sessionAttr) {
-		super();
-		this.sessionAttr = sessionAttr;
-	}
 
 	@Override
 	public Object handleResponse(HttpResponse response)
 			throws ClientProtocolException, IOException {
 		if(response != null){//字符编码格式
-			sessionAttr.addAttribute("charSet", EntityUtils.getContentCharSet(response.getEntity()));
+			HttpContext.addAttribute("charSet", EntityUtils.getContentCharSet(response.getEntity()));
 		}
 		ResponseHandler<?> handler = ResponseHandlerFactory.createResponseHandler(response.getEntity().getContentType().getValue());
 		Assert.notNull(handler, "解析返回结果的接口为null !!!");
