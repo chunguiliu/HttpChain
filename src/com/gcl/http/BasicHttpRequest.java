@@ -3,10 +3,15 @@ package com.gcl.http;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
 
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
@@ -14,23 +19,19 @@ import org.apache.http.NameValuePair;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.ResponseHandler;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
-import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.http.conn.HttpHostConnectException;
+import org.apache.http.conn.scheme.Scheme;
+import org.apache.http.conn.ssl.SSLSocketFactory;
+import org.apache.http.message.BasicHeader;
+import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 import org.springframework.util.Assert;
 
-import com.gcl.bean.HeaderList;
-import com.gcl.bean.NameValueList;
-import com.gcl.dao.AfterRequestHandler;
-import com.gcl.dao.BeforeRequestHandler;
 import com.gcl.exception.StopChainException;
 import com.gcl.factory.ResponseHandlerFactory;
+import com.gcl.http.cer.IgnoreCertificate;
 import com.gcl.http.context.HttpContext;
-import com.gcl.util.Invoker;
 import com.gcl.util.ListUtil;
 import com.gcl.util.LogUtil;
 import com.gcl.util.MapUtil;
@@ -39,20 +40,11 @@ public class BasicHttpRequest {
 
 	/* 外部注入 */
 	protected String requestUrl;
-	protected Map<String, String> paraMap;
+	protected Map<String, String> paraMap = new HashMap<String, String>();
 	protected Map<String, String> headers = new HashMap<String, String>();
 	protected String responseHandler;
 	protected String method = "GET";
-	protected BeforeRequestHandler beforeHandler;
-	protected AfterRequestHandler afterHandler;
 	/* 外部注入 end */
-	
-	protected NameValueList paraList = new NameValueList();
-	protected HeaderList headerList = new HeaderList();
-	protected HttpRequestChain requestChain;
-	protected Invoker invoker = new Invoker();
-	protected HandleNameValues handleNameValues;
-	
 	
 	public BasicHttpRequest() {
 		super();
@@ -62,97 +54,9 @@ public class BasicHttpRequest {
 		super();
 		this.method = method;
 	}
-
-	public BasicHttpRequest(BeforeRequestHandler beforeHandler) {
-		super();
-		this.beforeHandler = beforeHandler;
-	}
-
-	public BasicHttpRequest(AfterRequestHandler afterHandler) {
-		super();
-		this.afterHandler = afterHandler;
-	}
-
-	public BasicHttpRequest(BeforeRequestHandler beforeHandler,
-			AfterRequestHandler afterHandler) {
-		super();
-		this.beforeHandler = beforeHandler;
-		this.afterHandler = afterHandler;
-	}
-
-	public BasicHttpRequest(String method, BeforeRequestHandler beforeHandler,
-			AfterRequestHandler afterHandler) {
-		super();
-		this.method = method;
-		this.beforeHandler = beforeHandler;
-		this.afterHandler = afterHandler;
-	}
-
-	public void addHeader(String name, String value){
-		
-		headerList.add(name, value);
-	}
-	public void addParameter(String name, String value){
-		this.paraList.add(name, value);
-	}
-	public void addParameters(List<NameValuePair> list){
-		this.paraList.addAll(list);
-	}
-
-	public void refresh(){
-		this.headerList.clear();
-		this.paraList.clear();
-	}
 	
-	public void stop(){
-		this.requestChain.stop();
-	}
-	
-	private Map<String, String> iterateInvokeValues(Map<String, String> map){
-		if(MapUtil.isNotEmpty(map)){
-			Iterator<String> keys = map.keySet().iterator();
-			while(keys.hasNext()){
-				String key = keys.next();
-				if (invoker.compile(map.get(key))) {
-					map.put(key, String.valueOf(invoker.invoke()));
-				}
-			}
-		}
-		return map;
-	}
-	private List<Header> mergeHeader(){
-		if (HttpContext.getAttribute("Referer") != null && !headers.containsKey("Referer"))
-			this.headers.put("Referer", (String) HttpContext.getAttribute("Referer"));
-		getNameValuesHandle().handleHeaderMap(this.headers);
-		HeaderList headerList = new HeaderList();
-		headerList.addAll(this.iterateInvokeValues(this.headers));
-		return headerList;
-	}
-	
-	private List<NameValuePair> mergeParas(){
-		paraList.addAll(this.iterateInvokeValues(this.paraMap));
-		getNameValuesHandle().handleNameValuePairs(paraList);
-		return paraList;
-	}
-	
-	/**
-	 * 创建一个处理所有参数和请求头的接口，本实例的接口优先级最高，其次为请求链，若都为空，返回一个空实现的接口
-	 * @return
-	 */
-	private HandleNameValues getNameValuesHandle(){
-		HandleNameValues handle = null;
-		handle = (this.handleNameValues == null ? 
-				this.requestChain.getGlobalHandleNameValues() :
-					this.handleNameValues);
-		if(handle == null){
-			handle = new HandleNameValues(){
-				@Override
-				public void handleNameValuePairs(NameValueList nameValueList) {}
-				@Override
-				public void handleHeaderMap(Map<String, String> headers) {}
-			};
-		}
-		return handle;
+	public void addParameter(String key, String value){
+		this.paraMap.put(key, value);
 	}
 	/**
 	 * 根据上次请求结果获取的charSet
@@ -162,40 +66,60 @@ public class BasicHttpRequest {
 		return (String) HttpContext.getAttribute("charSet") == null ? "utf-8"
 				: (String) HttpContext.getAttribute("charSet");
 	}
+	
+	/* 由子类按需实现 */
+	protected void init(){}
+	protected void finish(HttpClient httpClient, HttpUriRequest uriRequest, Object response,HttpRequestChain chain) throws Exception{
+		setResponse(response);
+		HttpContext.addAttribute("uriRequest", uriRequest);
+		String referer = uriRequest.getURI().toString();
+		HttpContext.addAttribute("Referer", referer);
+		if (chain != null) {
+			chain.doRequest(httpClient);
+		}
+	}
+	
+	protected List<NameValuePair> getParameters(){
+		List<NameValuePair> list = new ArrayList<NameValuePair>();
+		if(MapUtil.isNotEmpty(this.paraMap)){
+			for(String key : this.paraMap.keySet()){
+				list.add(new BasicNameValuePair(key, paraMap.get(key)));
+			}
+		}
+		return list;
+	}
+	
+	protected List<Header> getHeaders(){
+		List<Header> list = new ArrayList<Header>();
+		if(MapUtil.isNotEmpty(this.headers)){
+			for(String key : this.headers.keySet()){
+				list.add(new BasicHeader(key, headers.get(key)));
+			}
+		}
+		return list;
+	}
+	
+	
 	public void request(HttpClient httpClient, HttpRequestChain chain) throws Exception{
 		//before request
-		this.requestChain = chain;
-		if(beforeHandler != null){
-			beforeHandler.beforeHandle(this.getReponse(), this);
-		}
+		init();
 		String reqUrl = getRequestUrl();
 		if(reqUrl == null){
 			throw new StopChainException("请求地址为空，终止请求链.");
 		}
-		HttpUriRequest uriRequest = getUriRequest(reqUrl);
-		setHeader(uriRequest, mergeHeader());
+		HttpUriRequest uriRequest = HttpUriRequestBuilder.builde(this.getMethod(), reqUrl, getParameters(), this.getCharSet());
+		
+		setHeader(uriRequest, getHeaders());
 		LogUtil.debug("请求： ["+ reqUrl +"]");
-		if (headers.size() > 0) {
-			LogUtil.debug("请求头信息:" + headers);
-		}
-		if (ListUtil.isNotEmpty(paraList)) {
-			LogUtil.debug("参数:" + paraList);
-		}
 		//request
 		Object response = execute(httpClient, uriRequest);
 		//after request
 		//cache
 		//缓存请求的页面内容
-		HttpContext.addAttribute("uriRequest", uriRequest);
-		String referer = uriRequest.getURI().toString();
-		HttpContext.addAttribute("Referer", referer);
-		if(afterHandler != null){
-			afterHandler.afterHandle(response, this);
-		}
-		setResponse(response);
 		LogUtil.debug("请求["+ reqUrl +"]结束\n");
-		this.requestChain.doRequest(httpClient);
+		finish(httpClient, uriRequest, response, chain);
 	}
+	
 	private String jointUrl(String simpleUrl){
 		HttpUriRequest uriRequest = (HttpUriRequest) HttpContext.getAttribute("uriRequest");
 		if(uriRequest != null){
@@ -204,30 +128,6 @@ public class BasicHttpRequest {
 			LogUtil.debug("complete url:"+simpleUrl);
 		}
 		return simpleUrl;
-	}
-	private HttpUriRequest getUriRequest(String reqUrl){
-		if(!reqUrl.startsWith("http")){
-			reqUrl = jointUrl(reqUrl);
-		}
-		List<NameValuePair> paras = mergeParas();
-		if("GET".equalsIgnoreCase(this.getMethod())){
-			String getUrl = reqUrl;
-			if(ListUtil.isNotEmpty(paras)){
-				getUrl += "?"+URLEncodedUtils.format(paras, this.getCharSet());
-			}
-			return new HttpGet(getUrl);
-		}else{
-			HttpPost httpost = new HttpPost(reqUrl);
-			if (ListUtil.isNotEmpty(paras)) {
-				try {
-					httpost.setEntity(new UrlEncodedFormEntity(paras, this
-							.getCharSet()));
-				} catch (UnsupportedEncodingException e) {
-					e.printStackTrace();
-				}
-			}
-			return httpost;
-		}
 	}
 	
 	public void setHeader(HttpUriRequest uriRequest,List<Header> headers){
@@ -246,19 +146,33 @@ public class BasicHttpRequest {
 	 * @return 
 	 * @throws InstantiationException
 	 */
-	public Object execute(HttpClient httpClient, HttpUriRequest uriRequest) throws InstantiationException{
+	public Object execute(HttpClient httpClient, HttpUriRequest uriRequest) throws InstantiationException {
 		boolean isException = false;
-		int trys=0;
+		if ("https".equalsIgnoreCase(uriRequest.getURI().getScheme())) {
+			SSLContext ctx = null;
+			try {
+				ctx = SSLContext.getInstance("SSL");
+				ctx.init(null, new TrustManager[] { new IgnoreCertificate() }, null);
+			} catch (NoSuchAlgorithmException e) {
+				e.printStackTrace();
+			} catch (KeyManagementException e) {
+				e.printStackTrace();
+			}
+			// 使用TrustManager来初始化该上下文，TrustManager只是被SSL的Socket所使用
+			SSLSocketFactory sf = new SSLSocketFactory(ctx, SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
+			Scheme sch = new Scheme("https", 443, sf);
+			httpClient.getConnectionManager().getSchemeRegistry().register(sch);
+		}
+		int trys = 0;
 		do {
 			// 发送请求，返回响应
 			try {
 				isException = false;
-				return httpClient.execute(uriRequest,
-						createResponseHandler(httpClient, uriRequest));
-				
+				return httpClient.execute(uriRequest, createResponseHandler(httpClient, uriRequest));
+
 			} catch (HttpHostConnectException e) {
 				isException = true;
-				LogUtil.error("连接异常:"+e.getMessage(), e);
+				LogUtil.error("连接异常:" + e.getMessage(), e);
 				e.printStackTrace();
 			} catch (ClientProtocolException e) {
 				e.printStackTrace();
@@ -266,21 +180,24 @@ public class BasicHttpRequest {
 				e.printStackTrace();
 			} catch (IOException e) {
 				isException = true;
-				LogUtil.error("连接IO异常:"+e.getMessage(), e);
+				LogUtil.error("连接IO异常:" + e.getMessage(), e);
 				e.printStackTrace();
-			}
+			} 
 		} while (isException && trys++ < this.retryTimes);
-		
+
 		return null;
 	}
+	
 	private ResponseHandler<Object> createResponseHandler(HttpClient httpClient, HttpUriRequest uriRequest) throws InstantiationException{
 		if(responseHandler == null || "".equals(responseHandler)){
 			return new ResponseHandlerImpl();
 		}else{//InstantiationException
 			Object obj = null;
 			try {
-				obj = invoker.getClass(responseHandler).newInstance();
+				obj = Class.forName(responseHandler).newInstance();
 			} catch (IllegalAccessException e) {
+				e.printStackTrace();
+			} catch (ClassNotFoundException e) {
 				e.printStackTrace();
 			}
 			if(!(obj instanceof ResponseHandler)){
@@ -297,6 +214,9 @@ public class BasicHttpRequest {
 	}
 	
 	public String getRequestUrl() {
+		if(requestUrl != null && !requestUrl.startsWith("http")){
+			requestUrl = jointUrl(requestUrl);
+		}
 		return requestUrl;
 	}
 
@@ -320,26 +240,6 @@ public class BasicHttpRequest {
 		this.method = method;
 	}
 
-	public BeforeRequestHandler getBeforeHandler() {
-		return beforeHandler;
-	}
-
-	public void setBeforeHandler(BeforeRequestHandler beforeHandler) {
-		this.beforeHandler = beforeHandler;
-	}
-
-	public AfterRequestHandler getAfterHandler() {
-		return afterHandler;
-	}
-
-	public void setAfterHandler(AfterRequestHandler afterHandler) {
-		this.afterHandler = afterHandler;
-	}
-
-	public Map<String, String> getHeaders() {
-		return headers;
-	}
-
 	public void setHeaders(Map<String, String> headers) {
 		this.headers = headers;
 	}
@@ -350,14 +250,6 @@ public class BasicHttpRequest {
 
 	public void setParaMap(Map<String, String> paraMap) {
 		this.paraMap = paraMap;
-	}
-
-	public HandleNameValues getHandleNameValues() {
-		return handleNameValues;
-	}
-
-	public void setHandleNameValues(HandleNameValues handleNameValues) {
-		this.handleNameValues = handleNameValues;
 	}
 
 	public int getRetryTimes() {

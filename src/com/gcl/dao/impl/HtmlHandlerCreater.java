@@ -7,7 +7,7 @@ public class HtmlHandlerCreater implements IHandlerCreater {
 
 	@Override
 	public boolean compareWith(String contentType) {
-		return contentType.indexOf("text/html") != -1;
+		return contentType.indexOf("text/html") != -1 || contentType.indexOf("application/json") != -1;
 	}
 
 	@Override

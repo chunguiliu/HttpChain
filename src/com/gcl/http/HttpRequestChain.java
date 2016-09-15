@@ -56,14 +56,12 @@ public class HttpRequestChain {
 				requestList[index++].request(httpClient, this);
 			} catch (RollBackException e) {
 				LogUtil.error("执行第"+index+"个请求时，回滚至"+e.getRollTo()+",异常："+e.getMessage());
-				clearRollbackRequest(e.getRollTo());//清除原来产生的参数和请求头
 				index = e.getRollTo() - 1;
 				doRequest(httpClient);
 			} catch (StopChainException e) {
 				LogUtil.error("执行第"+index+"个请求停止,异常："+e.getMessage());
 			} catch (ReRequestException e){
 				LogUtil.error("重新执行第"+index+"个请求："+e.getMessage());
-				clearRollbackRequest(index);//清除原来产生的参数和请求头
 				index--;
 				doRequest(httpClient);
 			} catch (Exception e){
@@ -75,11 +73,6 @@ public class HttpRequestChain {
 		}
 	}
 
-	private void clearRollbackRequest(int rollTo){
-		for(int i=rollTo-1; i<index; i++){
-			requestList[i].refresh();
-		}
-	}
 	public void refresh() throws Exception{
 		this.setIndex(0);
 		this.doRequest();
